@@ -1,0 +1,8 @@
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+data/
+*.md
+Dockerfile
+docker-compose.yml

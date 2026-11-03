@@ -67,6 +67,73 @@ Then open **<http://localhost:8080>**.
 
 ---
 
+## 🐳 Docker Deployment (recommended for servers)
+
+Runs the dashboard in a small container. The image is **Python standard library
+only** — there are **no dependencies to install**. Runtime data persists in
+`./data`.
+
+```sh
+# On the Docker host, from the project directory:
+docker compose build
+docker compose up -d
+
+# Status / logs
+docker compose ps
+docker compose logs -f
+```
+
+Then open **<http://localhost:8090>**.
+
+Key points:
+
+- The app listens on **8080 inside the container**, published on
+  **`127.0.0.1:8090`** on the host (loopback only, so it is not exposed
+  directly). If 8090 is taken, change the left-hand side of the `ports:` entry
+  in `docker-compose.yml`.
+- `./data` is bind-mounted to `/app/data` (state, history, stock) and
+  `./config.json` to `/app/config.json` (read-only). Edit printers/thresholds in
+  `config.json`, then run `docker compose restart` to apply.
+- The container runs on a dedicated bridge network named `printerdash`
+  (interface `br-printerdash`).
+
+### Firewall / reaching the printers
+
+The container needs **outbound TCP/80** access to the printers' web UI. If the
+host firewall drops forwarded traffic by default, allow this bridge. Example
+`nftables` rules (add to the `forward` chain):
+
+```nft
+iifname "br-printerdash" ip daddr @private_v4 tcp dport 80 accept
+oifname "br-printerdash" ct state established,related accept
+```
+
+### Behind a reverse proxy (HTTPS)
+
+To publish it through a reverse proxy, point an upstream at the host loopback:
+
+```nginx
+upstream printer_dashboard { server 127.0.0.1:8090; keepalive 16; }
+
+server {
+    listen 443 ssl;
+    server_name printer-dashboard.example.com;
+
+    location / { proxy_pass http://printer_dashboard; }
+}
+```
+
+### Update / uninstall
+
+```sh
+git pull
+docker compose up -d --build   # rebuild and restart
+
+docker compose down            # stop and remove the container
+```
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -75,6 +142,9 @@ printer-dashboard/
 ├─ collector.py        # Fetch → normalize → evaluate alerts → notify, stock I/O
 ├─ config.json         # Printers, thresholds, notification settings
 ├─ CONCEPT.md          # Full architecture & design notes
+├─ Dockerfile          # Container image (stdlib only, no pip install)
+├─ docker-compose.yml  # Service definition (127.0.0.1:8090 → 8080)
+├─ .dockerignore       # Files excluded from the image build context
 ├─ web/
 │  ├─ index.html       # Light / clean theme  (served at /)
 │  └─ v1.html          # Dark / modern theme  (served at /v1.html)
