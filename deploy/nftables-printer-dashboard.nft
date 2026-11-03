@@ -1,0 +1,15 @@
+# nftables rules for the Printer Dashboard container.
+#
+# The host firewall (/etc/nftables.conf) sets the `forward` chain policy to
+# `drop`, so a container on the default bridge cannot reach the printers.
+# The compose file puts the container on a dedicated bridge named `printerdash`
+# (interface `br-printerdash`). Add the following rules to the `forward` chain
+# to allow the container to reach the printers' web UI (TCP/80):
+#
+#     iifname "br-printerdash" ip daddr @private_v4 tcp dport 80 accept comment "printer-dashboard -> printers"
+#     oifname "br-printerdash" ct state established,related accept comment "printer-dashboard replies"
+#
+# Validate and apply:
+#     nft -c -f /etc/nftables.conf && nft -f /etc/nftables.conf
+#
+# (@private_v4 is the RFC1918 set already defined in /etc/nftables.conf.)

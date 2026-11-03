@@ -132,6 +132,13 @@ docker compose up -d --build   # rebuild and restart
 docker compose down            # stop and remove the container
 ```
 
+### Server deployment (reference)
+
+See [`deploy/`](deploy/) for the full server setup: firewall rules
+(`deploy/nftables-printer-dashboard.nft`), the nginx vhost
+(`deploy/nginx-printer-dashboard.conf`) and the step-by-step guide
+(`deploy/README.md`).
+
 ---
 
 ## 📁 Project Structure
@@ -145,6 +152,7 @@ printer-dashboard/
 ├─ Dockerfile          # Container image (stdlib only, no pip install)
 ├─ docker-compose.yml  # Service definition (127.0.0.1:8090 → 8080)
 ├─ .dockerignore       # Files excluded from the image build context
+├─ deploy/             # Server deployment artifacts (nginx vhost, firewall, guide)
 ├─ web/
 │  ├─ index.html       # Light / clean theme  (served at /)
 │  └─ v1.html          # Dark / modern theme  (served at /v1.html)
