@@ -1,0 +1,111 @@
+{
+  "poll_interval_seconds": 60,
+  "http_timeout_seconds": 10,
+  "printers": [
+    {
+      "id": "fx-c3070-01",
+      "name": "Fuji Xerox C3070 - Site Office",
+      "ip": "192.168.10.254",
+      "type": "fujixerox_wui",
+      "driver_url": ""
+    },
+    {
+      "id": "fx-c3570-02",
+      "name": "Fuji Xerox C3570 - SO Consolidate Room",
+      "ip": "192.168.11.241",
+      "type": "fujixerox_wui",
+      "driver_url": ""
+    },
+    {
+      "id": "fx-c3070-03",
+      "name": "Fuji Xerox C3070 - CCB Maintenance Room Lt2",
+      "ip": "192.168.11.231",
+      "type": "fujixerox_wui",
+      "driver_url": ""
+    },
+    {
+      "id": "fx-c3070-04",
+      "name": "Fuji Xerox C3070 - CCB OPE",
+      "ip": "192.168.11.233",
+      "type": "fujixerox_wui",
+      "driver_url": ""
+    },
+    {
+      "id": "fx-c3070-05",
+      "name": "Fuji Xerox C3070 - CHB Printer",
+      "ip": "192.168.11.234",
+      "type": "fujixerox_wui",
+      "driver_url": ""
+    },
+    {
+      "id": "fx-c3530-06",
+      "name": "Fuji Xerox C3530 - Warehouse",
+      "ip": "192.168.11.237",
+      "type": "fujixerox_wui",
+      "driver_url": "",
+      "label_map": {
+        "DRUM_K": "Drum Cartridge (K)",
+        "DRUM_C": "Drum Cartridge (C)",
+        "DRUM_M": "Drum Cartridge (M)",
+        "DRUM_Y": "Drum Cartridge (Y)",
+        "WASTE_TONER_BOX": "Waste Toner Container"
+      }
+    },
+    {
+      "id": "fx-c3530-07",
+      "name": "Fuji Xerox C3530 - LAB",
+      "ip": "192.168.11.238",
+      "type": "fujixerox_wui",
+      "driver_url": "",
+      "label_map": {
+        "DRUM_K": "Drum Cartridge (K)",
+        "DRUM_C": "Drum Cartridge (C)",
+        "DRUM_M": "Drum Cartridge (M)",
+        "DRUM_Y": "Drum Cartridge (Y)",
+        "WASTE_TONER_BOX": "Waste Toner Container"
+      }
+    },
+    {
+      "id": "fx-c3530-08",
+      "name": "Fuji Xerox C3530 - Workshop Maintenance Room",
+      "ip": "192.168.11.239",
+      "type": "fujixerox_wui",
+      "driver_url": "",
+      "label_map": {
+        "DRUM_K": "Drum Cartridge (K)",
+        "DRUM_C": "Drum Cartridge (C)",
+        "DRUM_M": "Drum Cartridge (M)",
+        "DRUM_Y": "Drum Cartridge (Y)",
+        "WASTE_TONER_BOX": "Waste Toner Container"
+      }
+    },
+    {
+      "id": "fx-c4030-10",
+      "name": "Fuji Xerox C4030 - AHF 2A",
+      "ip": "10.161.11.212",
+      "type": "fujixerox_wui",
+      "driver_url": "",
+      "label_map": {
+        "DRUM_K": "Drum Cartridge (K)",
+        "DRUM_C": "Drum Cartridge (C)",
+        "DRUM_M": "Drum Cartridge (M)",
+        "DRUM_Y": "Drum Cartridge (Y)",
+        "WASTE_TONER_BOX": "Waste Toner Container"
+      }
+    }
+  ],
+  "thresholds": {
+    "toner_low": 20,
+    "toner_critical": 10,
+    "drum_low": 15,
+    "page_remaining_critical": 1000
+  },
+  "notifications": {
+    "cooldown_minutes": 360,
+    "telegram": {
+      "enabled": false,
+      "bot_token": "",
+      "chat_id": ""
+    }
+  }
+}

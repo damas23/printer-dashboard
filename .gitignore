@@ -1,0 +1,17 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---- Runtime data (dibuat saat aplikasi berjalan) ----
+data/*.json
+data/*.jsonl
+data/*.tmp
+!data/.gitkeep
+
+# ---- OS / editor ----
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.log

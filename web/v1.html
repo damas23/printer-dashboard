@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Printer Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0f1c;
+    --panel: #111a2b;
+    --card-top: #16223a;
+    --card-bot: #101827;
+    --border: #23324a;
+    --border-hi: #35496a;
+    --text: #e7eefb;
+    --muted: #8ea0bd;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --orange: #fb923c;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --violet: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1100px 600px at 12% -10%, rgba(59,130,246,.16), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(167,139,250,.12), transparent 55%),
+      radial-gradient(800px 600px at 50% 120%, rgba(34,197,94,.08), transparent 60%),
+      var(--bg);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 26px;
+    background: rgba(10,15,28,.72);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+    font-size: 20px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    box-shadow: 0 6px 18px rgba(59,130,246,.35);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+  header .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  header .spacer { flex: 1; }
+  .live {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted);
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: rgba(17,26,43,.6);
+  }
+  .live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 2s infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); }
+    70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  }
+  button, .icon-btn {
+    background: #1b263c; color: var(--text); border: 1px solid var(--border);
+    padding: 9px 15px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: background .15s, border-color .15s, transform .1s;
+  }
+  button:hover, .icon-btn:hover { background: #243350; border-color: var(--border-hi); }
+  button:active { transform: scale(.97); }
+
+  /* ---------- Layout ---------- */
+  main { padding: 24px 26px 40px; max-width: 1560px; margin: 0 auto; }
+
+  /* ---------- Stat tiles ---------- */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .stat {
+    position: relative; overflow: hidden;
+    background: linear-gradient(160deg, var(--card-top), var(--card-bot));
+    border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px;
+  }
+  .stat::after {
+    content: ""; position: absolute; right: -18px; top: -18px; width: 76px; height: 76px;
+    border-radius: 50%; background: var(--accent, transparent); opacity: .12;
+  }
+  .stat .num { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -.5px; }
+  .stat .cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .09em; margin-top: 8px; font-weight: 600; }
+  .stat.total .num { color: var(--text); }
+  .stat.online { --accent: var(--green); } .stat.online .num { color: #6ee7a0; }
+  .stat.warn  { --accent: var(--orange); } .stat.warn .num  { color: #fdba74; }
+  .stat.crit  { --accent: var(--red); } .stat.crit .num  { color: #fca5a5; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .search { position: relative; flex: 1; min-width: 220px; max-width: 380px; }
+  .search input {
+    width: 100%; padding: 10px 14px 10px 38px; border-radius: 10px;
+    background: var(--panel); border: 1px solid var(--border); color: var(--text); font-size: 13.5px; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .search input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
+  .search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: .5; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    padding: 8px 15px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: .15s;
+  }
+  .chip:hover { color: var(--text); border-color: var(--border-hi); }
+  .chip.active { background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff; border-color: transparent; }
+  .chip .cnt { opacity: .7; margin-left: 6px; font-weight: 700; }
+
+  /* ---------- Grid + cards ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 18px; }
+  .card {
+    position: relative;
+    background: linear-gradient(170deg, var(--card-top), var(--card-bot));
+    border: 1px solid var(--border); border-radius: 16px; padding: 18px 18px 16px;
+    overflow: hidden;
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+  }
+  .card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--accent, var(--green));
+  }
+  .card:hover { transform: translateY(-3px); border-color: var(--border-hi); box-shadow: 0 16px 34px rgba(0,0,0,.42); }
+  .card.offline { opacity: .72; --accent: #475569; }
+
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .card-header h2 { font-size: 15px; margin: 0; line-height: 1.35; font-weight: 700; }
+  .badge { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; font-weight: 700; letter-spacing: .04em; border: 1px solid transparent; }
+  .badge.online { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.30); }
+  .badge.offline { background: rgba(239,68,68,.14); color: #fca5a5; border-color: rgba(239,68,68,.30); }
+
+  .card .sub { color: var(--muted); font-size: 12px; margin: 6px 0 4px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(148,163,184,.12); border: 1px solid var(--border); color: #aebbd0; }
+
+  .supplies { margin: 12px 0 4px; }
+  .supply { margin: 11px 0; }
+  .supply .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .supply .lbl { font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .color-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 0 6px rgba(0,0,0,.4); flex: none; }
+  .status { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .status.ok { background: rgba(34,197,94,.13); color: #86efac; border-color: rgba(34,197,94,.25); }
+  .status.warning { background: rgba(251,146,60,.14); color: #fdba74; border-color: rgba(251,146,60,.30); }
+  .status.critical { background: rgba(239,68,68,.15); color: #fca5a5; border-color: rgba(239,68,68,.30); }
+
+  .supply .meta { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+  .bar { flex: 1; height: 8px; border-radius: 999px; background: #0a1120; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
+  .bar > span { display: block; height: 100%; border-radius: 999px; transition: width .7s cubic-bezier(.4,0,.2,1); }
+  .fill-high { background: linear-gradient(90deg, #16a34a, #22c55e); }
+  .fill-mid  { background: linear-gradient(90deg, #ca8a04, #eab308); }
+  .fill-low  { background: linear-gradient(90deg, #ea580c, #fb923c); }
+  .fill-crit { background: linear-gradient(90deg, #dc2626, #ef4444); }
+  .supply .meta .pct { color: #b8c6dd; font-size: 12px; font-weight: 700; white-space: nowrap; min-width: 38px; text-align: right; }
+
+  .empty { color: var(--muted); font-size: 14px; padding: 12px 2px; }
+
+  .actions { display: flex; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .btn {
+    flex: 1; text-align: center; text-decoration: none; padding: 9px 12px; border-radius: 10px;
+    font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: #1a2438; color: var(--text);
+    transition: background .15s, filter .15s, border-color .15s;
+  }
+  .btn:hover { background: #22304a; border-color: var(--border-hi); }
+  .btn.primary { background: linear-gradient(135deg, #2563eb, #3b82f6); border-color: transparent; color: #fff; }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.disabled { opacity: .38; pointer-events: none; cursor: not-allowed; }
+
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 26px; text-align: center; }
+  .no-match { grid-column: 1 / -1; color: var(--muted); text-align: center; padding: 40px 0; font-size: 14px; }
+
+  /* ---------- Modal stok ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center;
+    padding: 40px 16px; overflow: auto; background: rgba(3,7,15,.68); backdrop-filter: blur(5px);
+  }
+  .overlay[hidden] { display: none; }
+  .modal {
+    width: min(960px, 100%); background: linear-gradient(170deg, var(--card-top), var(--card-bot));
+    border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.62);
+    padding: 22px 22px 18px; animation: pop .18s ease-out;
+  }
+  @keyframes pop { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .modal-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
+  .modal-sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .modal-close { width: 38px; height: 38px; padding: 0; border-radius: 10px; font-size: 15px; line-height: 1; display: grid; place-items: center; }
+  .modal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .save-status { font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 2px; }
+  .save-status.dirty { color: #fdba74; }
+  .save-status.saved { color: #6ee7a0; }
+  .btn-add, .btn-save {
+    padding: 9px 14px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+    border: 1px solid var(--border); background: rgba(148,163,184,.10); color: var(--text);
+  }
+  .btn-add:hover { border-color: var(--blue); }
+  .btn-save { background: linear-gradient(135deg, #2563eb, #3b82f6); border-color: transparent; color: #fff; box-shadow: 0 6px 16px rgba(37,99,235,.35); }
+  .btn-save:hover { filter: brightness(1.08); }
+  .btn-save:disabled { opacity: .45; cursor: default; filter: none; box-shadow: none; }
+  .stock-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .sstat { background: rgba(148,163,184,.07); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .sstat .n { font-size: 22px; font-weight: 800; line-height: 1; }
+  .sstat .c { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; margin-top: 6px; font-weight: 700; }
+  .sstat.aman .n { color: #6ee7a0; } .sstat.menipis .n { color: #fdba74; } .sstat.habis .n { color: #fca5a5; }
+  .stock-search { margin-bottom: 12px; }
+  .stock-search input {
+    width: 100%; padding: 10px 14px; border-radius: 11px; border: 1px solid var(--border);
+    font-size: 13.5px; outline: none; background: #0d1524; color: var(--text);
+  }
+  .stock-search input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(59,130,246,.16); }
+  .table-wrap { border: 1px solid var(--border); border-radius: 14px; overflow: auto; max-height: 52vh; }
+  table.stock-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.stock-table th {
+    position: sticky; top: 0; background: #131d30; color: var(--muted); text-align: left; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .06em; padding: 11px 14px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  table.stock-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+  table.stock-table tr:last-child td { border-bottom: 0; }
+  table.stock-table tbody tr:hover { background: rgba(148,163,184,.06); }
+  .ta-r { text-align: right; }
+  .cell-input {
+    width: 100%; min-width: 100px; padding: 6px 8px; border-radius: 8px; font: inherit;
+    border: 1px solid transparent; background: transparent; color: var(--text); outline: none;
+  }
+  .cell-input::placeholder { color: #566379; }
+  .cell-input:hover { border-color: var(--border); background: rgba(148,163,184,.08); }
+  .cell-input:focus { border-color: var(--blue); background: #0d1524; box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
+  .cell-num { min-width: 60px; width: 60px; text-align: right; font-weight: 700; }
+  td.cell-part { display: flex; align-items: center; gap: 6px; }
+  td.cell-part .cell-input { flex: 1; width: auto; min-width: 150px; }
+  .row-del {
+    width: 30px; height: 30px; padding: 0; border-radius: 8px; font-size: 14px; line-height: 1;
+    border: 1px solid transparent; background: transparent; color: #64748b; cursor: pointer;
+  }
+  .row-del:hover { background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.35); color: #fca5a5; }
+  .sdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+  .sbadge { font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; border: 1px solid transparent; }
+  .sbadge.aman { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.3); }
+  .sbadge.menipis { background: rgba(251,146,60,.15); color: #fdba74; border-color: rgba(251,146,60,.3); }
+  .sbadge.habis { background: rgba(239,68,68,.16); color: #fca5a5; border-color: rgba(239,68,68,.3); }
+  .stock-empty { text-align: center; color: var(--muted); padding: 30px 0; }
+  .stock-hint { color: var(--muted); font-size: 12px; margin: 12px 2px 0; }
+  .stock-hint code { background: rgba(148,163,184,.12); padding: 1px 5px; border-radius: 5px; font-size: 11.5px; }
+
+  @media (max-width: 560px) {
+    header { padding: 12px 16px; }
+    main { padding: 18px 16px 32px; }
+    .stat .num { font-size: 25px; }
+    .stock-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">🖨️</div>
+    <div>
+      <h1>Printer Dashboard</h1>
+      <div class="meta" id="updated">loading…</div>
+    </div>
+  </div>
+  <span class="spacer"></span>
+  <div class="live"><span class="dot"></span> Monitoring</div>
+  <button class="icon-btn" onclick="openStock()">📦 Spare Parts Stock</button>
+  <button class="icon-btn" onclick="refresh(true)">⟳ Refresh</button>
+</header>
+
+<main>
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar">
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search" type="text" placeholder="Search printer or IP…" autocomplete="off" />
+    </div>
+    <div class="chips" id="chips">
+      <button class="chip active" data-filter="all">All <span class="cnt" id="c-all">0</span></button>
+      <button class="chip" data-filter="online">Online <span class="cnt" id="c-online">0</span></button>
+      <button class="chip" data-filter="attention">Needs Attention <span class="cnt" id="c-att">0</span></button>
+      <button class="chip" data-filter="offline">Offline <span class="cnt" id="c-off">0</span></button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p class="footer-note">Sumber data: REST API printer (hanya persentase) · Refresh otomatis tiap 30 detik.</p>
+</main>
+
+<div class="overlay" id="stockOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Stok Spare Part Gudang">
+    <div class="modal-head">
+      <div>
+        <h2>📦 Stok Spare Part Gudang</h2>
+        <div class="modal-sub" id="stockMeta">loading…</div>
+      </div>
+      <div class="modal-actions">
+        <span class="save-status" id="stockSaveStatus"></span>
+        <button class="btn-add" onclick="addStockRow()">＋ Add Item</button>
+        <button class="btn-save" id="stockSaveBtn" onclick="saveStock()" disabled>💾 Save</button>
+        <button class="modal-close" onclick="closeStock()" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="stock-stats" id="stockStats"></div>
+    <div class="stock-search">
+      <input id="stockSearch" type="text" placeholder="Search part / model / location…" autocomplete="off" />
+    </div>
+    <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>Part</th><th>Model</th><th class="ta-r">Qty</th><th>Location</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="stockBody"></tbody>
+      </table>
+    </div>
+    <p class="stock-hint">Edit the name/quantity to match the warehouse, then click <b>💾 Save</b>. Data is stored in <code>data/stock.json</code>.</p>
+  </div>
+</div>
+
+<script>
+let STATE = { printers: [] };
+let FILTER = "all";
+let QUERY = "";
+
+const COLOR_BY_SUFFIX = { Y: "#facc15", M: "#ec4899", C: "#22d3ee", K: "#8b98ac", R: "#94a3b8" };
+
+function levelRank(l) {
+  return l === "critical" ? 3 : l === "warning" ? 2 : 1;
+}
+function worstLevel(dev) {
+  if (!dev.reachable) return "offline";
+  let w = "ok";
+  (dev.supplies || []).forEach(s => {
+    if (levelRank(s.status_level) > levelRank(w)) w = s.status_level;
+  });
+  return w;
+}
+function accentFor(level) {
+  return level === "critical" ? "#ef4444" : level === "warning" ? "#fb923c" : level === "offline" ? "#475569" : "#22c55e";
+}
+function pctClass(v) {
+  if (v === null || v === undefined) return "fill-crit";
+  if (v <= 10) return "fill-crit";
+  if (v <= 20) return "fill-low";
+  if (v <= 50) return "fill-mid";
+  return "fill-high";
+}
+function supplyColor(s) {
+  if (s.kind === "waste") return "#a78bfa";
+  const last = (s.key || "").toUpperCase().split("_").pop();
+  if (COLOR_BY_SUFFIX[last]) return COLOR_BY_SUFFIX[last];
+  const l = (s.label || "").toLowerCase();
+  if (l.includes("yellow")) return "#facc15";
+  if (l.includes("magenta")) return "#ec4899";
+  if (l.includes("cyan")) return "#22d3ee";
+  if (l.includes("black")) return "#8b98ac";
+  return "#94a3b8";
+}
+function statusText(dev) {
+  if (!dev.reachable) return "OFFLINE";
+  return dev.system_state || dev.status || "?";
+}
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function matches(dev) {
+  if (FILTER === "online" && !dev.reachable) return false;
+  if (FILTER === "offline" && dev.reachable) return false;
+  if (FILTER === "attention" && !(dev.reachable && worstLevel(dev) !== "ok")) return false;
+  if (QUERY) {
+    const hay = (dev.name + " " + dev.ip + " " + (dev.product || "") + " " + (dev.model || "")).toLowerCase();
+    if (!hay.includes(QUERY)) return false;
+  }
+  return true;
+}
+
+function renderPrinter(dev) {
+  const level = worstLevel(dev);
+  const card = el("div", "card" + (dev.reachable ? "" : " offline"));
+  card.style.setProperty("--accent", accentFor(level));
+
+  const head = el("div", "card-header");
+  head.appendChild(el("h2", null, dev.name));
+  head.appendChild(el("span", "badge " + (dev.reachable ? "online" : "offline"), dev.reachable ? "ONLINE" : "OFFLINE"));
+  card.appendChild(head);
+
+  const sub = el("div", "sub");
+  sub.appendChild(el("span", "pill", dev.ip));
+  sub.appendChild(el("span", "pill", dev.product || dev.model || "model ?"));
+  if (dev.reachable) sub.appendChild(el("span", "pill", statusText(dev)));
+  card.appendChild(sub);
+
+  const supplies = dev.supplies || [];
+  const wrap = el("div", "supplies");
+  if (!supplies.length) wrap.appendChild(el("div", "empty", dev.note || "No supply data."));
+  supplies.forEach(s => {
+    const item = el("div", "supply");
+    const row = el("div", "row");
+    const lbl = el("span", "lbl");
+    lbl.appendChild(el("span", "color-dot")).style.background = supplyColor(s);
+    lbl.appendChild(el("span", null, s.label));
+    row.appendChild(lbl);
+    row.appendChild(el("span", "status " + (s.status_level || ""), s.status_text || ""));
+    item.appendChild(row);
+
+    // hanya tampilkan bar + persentase bila printer melaporkan angkanya
+    if (s.remaining !== null && s.remaining !== undefined) {
+      const meta = el("div", "meta");
+      const bar = el("div", "bar");
+      const fill = el("span", pctClass(s.remaining));
+      fill.style.width = Math.max(0, Math.min(100, s.remaining)) + "%";
+      bar.appendChild(fill);
+      meta.appendChild(bar);
+      meta.appendChild(el("span", "pct", s.remaining + "%"));
+      item.appendChild(meta);
+    }
+    wrap.appendChild(item);
+  });
+  card.appendChild(wrap);
+
+  const actions = el("div", "actions");
+  const access = el("a", "btn primary", "Access Page");
+  access.href = dev.web_url || ("http://" + dev.ip + "/");
+  access.target = "_blank";
+  access.rel = "noopener";
+  actions.appendChild(access);
+
+  const dl = el("a", "btn" + (dev.driver_url ? "" : " disabled"), "Download Driver");
+  if (dev.driver_url) {
+    dl.href = dev.driver_url;
+    dl.target = "_blank";
+    dl.rel = "noopener";
+  } else {
+    dl.title = "Driver URL not set (config.json → driver_url)";
+  }
+  actions.appendChild(dl);
+  card.appendChild(actions);
+
+  return card;
+}
+
+function renderStats() {
+  const ps = STATE.printers || [];
+  const online = ps.filter(p => p.reachable).length;
+  const warn = ps.filter(p => p.reachable && worstLevel(p) === "warning").length;
+  const crit = ps.filter(p => p.reachable && worstLevel(p) === "critical").length;
+  const offline = ps.length - online;
+
+  document.getElementById("stats").innerHTML =
+    `<div class="stat total"><div class="num">${ps.length}</div><div class="cap">Total Printers</div></div>` +
+    `<div class="stat online"><div class="num">${online}</div><div class="cap">Online</div></div>` +
+    `<div class="stat warn"><div class="num">${warn}</div><div class="cap">Needs Attention</div></div>` +
+    `<div class="stat crit"><div class="num">${crit}</div><div class="cap">Critical</div></div>`;
+
+  document.getElementById("c-all").textContent = ps.length;
+  document.getElementById("c-online").textContent = online;
+  document.getElementById("c-att").textContent = warn + crit;
+  document.getElementById("c-off").textContent = offline;
+}
+
+function renderGrid() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const list = (STATE.printers || []).filter(matches);
+  if (!(STATE.printers || []).length) {
+    grid.appendChild(el("div", "empty", "No printers in config.json."));
+    return;
+  }
+  if (!list.length) {
+    grid.appendChild(el("div", "no-match", "No printers match the filter."));
+    return;
+  }
+  list.forEach(d => grid.appendChild(renderPrinter(d)));
+}
+
+function paint(state) {
+  STATE = state;
+  document.getElementById("updated").textContent =
+    "Update: " + (state.updated ? new Date(state.updated).toLocaleString() : "-");
+  renderStats();
+  renderGrid();
+}
+
+async function refresh(runCollect) {
+  try {
+    const res = await fetch(runCollect ? "/api/collect" : "/api/state", { cache: "no-store" });
+    paint(await res.json());
+  } catch (e) {
+    document.getElementById("grid").innerHTML =
+      '<div class="card">Failed to load data: ' + e.message + "</div>";
+  }
+}
+
+document.getElementById("search").addEventListener("input", e => {
+  QUERY = e.target.value.trim().toLowerCase();
+  renderGrid();
+});
+document.getElementById("chips").addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  FILTER = chip.dataset.filter;
+  document.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c === chip));
+  renderGrid();
+});
+
+/* ---------- Stok spare part (gudang) ---------- */
+let STOCK = { updated: "", items: [] };
+let STOCK_QUERY = "";
+let STOCK_DIRTY = false;
+
+function stockColor(part) {
+  const l = (part || "").toLowerCase();
+  if (l.includes("yellow")) return "#eab308";
+  if (l.includes("magenta")) return "#ec4899";
+  if (l.includes("cyan")) return "#22d3ee";
+  if (l.includes("black")) return "#9aa6b2";
+  if (l.includes("waste")) return "#a78bfa";
+  if (l.includes("drum")) return "#64748b";
+  if (l.includes("fuser") || l.includes("fusing")) return "#38bdf8";
+  if (l.includes("maintenance")) return "#fb923c";
+  return "#94a3b8";
+}
+const STOCK_LOW_THRESHOLD = 2;  // qty at or below this is flagged as low
+function stockLevel(it) {
+  const q = Number(it.qty) || 0;
+  if (q <= 0) return "habis";
+  if (q <= STOCK_LOW_THRESHOLD) return "menipis";
+  return "aman";
+}
+function stockStatusText(lvl) {
+  return lvl === "habis" ? "Out of Stock" : lvl === "menipis" ? "Low" : "In Stock";
+}
+function escAttr(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function renderStockStats() {
+  const items = STOCK.items || [];
+  const units = items.reduce((a, it) => a + (Number(it.qty) || 0), 0);
+  const menipis = items.filter(it => stockLevel(it) === "menipis").length;
+  const habis = items.filter(it => stockLevel(it) === "habis").length;
+  document.getElementById("stockStats").innerHTML =
+    `<div class="sstat"><div class="n">${items.length}</div><div class="c">Item Types</div></div>` +
+    `<div class="sstat aman"><div class="n">${units}</div><div class="c">Total Units</div></div>` +
+    `<div class="sstat menipis"><div class="n">${menipis}</div><div class="c">Low</div></div>` +
+    `<div class="sstat habis"><div class="n">${habis}</div><div class="c">Out of Stock</div></div>`;
+}
+function renderStockRows() {
+  const body = document.getElementById("stockBody");
+  body.innerHTML = "";
+  let rows = (STOCK.items || []).map((it, i) => ({ it, i }));
+  if (STOCK_QUERY) {
+    rows = rows.filter(({ it }) =>
+      (it.part + " " + (it.model || "") + " " + (it.location || "") + " " + (it.code || "")).toLowerCase().includes(STOCK_QUERY));
+  }
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6; td.className = "stock-empty";
+    td.textContent = (STOCK.items || []).length
+      ? "No items match your search."
+      : "No items yet. Click “＋ Add Item” to add one.";
+    tr.appendChild(td); body.appendChild(tr);
+    return;
+  }
+  const order = { habis: 0, menipis: 1, aman: 2 };
+  rows.sort((a, b) => order[stockLevel(a.it)] - order[stockLevel(b.it)] || (a.it.part || "").localeCompare(b.it.part || ""));
+  rows.forEach(({ it, i }) => {
+    const lvl = stockLevel(it);
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td class="cell-part"><span class="sdot" style="background:${stockColor(it.part)}"></span>` +
+      `<input class="cell-input" data-idx="${i}" data-field="part" value="${escAttr(it.part)}" placeholder="Part name"></td>` +
+      `<td><input class="cell-input" data-idx="${i}" data-field="model" value="${escAttr(it.model)}" placeholder="Model"></td>` +
+      `<td class="ta-r"><input class="cell-input cell-num" type="number" min="0" data-idx="${i}" data-field="qty" value="${Number(it.qty) || 0}"></td>` +
+      `<td><input class="cell-input" data-idx="${i}" data-field="location" value="${escAttr(it.location)}" placeholder="Location"></td>` +
+      `<td><span class="sbadge ${lvl}" data-badge="${i}">${stockStatusText(lvl)}</span></td>` +
+      `<td><button class="row-del" title="Delete item" onclick="deleteStockRow(${i})">🗑</button></td>`;
+    body.appendChild(tr);
+  });
+}
+function updateRowBadge(idx) {
+  const badge = document.querySelector(`[data-badge="${idx}"]`);
+  if (!badge) return;
+  const lvl = stockLevel(STOCK.items[idx]);
+  badge.className = "sbadge " + lvl;
+  badge.textContent = stockStatusText(lvl);
+}
+function setDirty(dirty) {
+  STOCK_DIRTY = dirty;
+  const st = document.getElementById("stockSaveStatus");
+  const btn = document.getElementById("stockSaveBtn");
+  btn.disabled = !dirty;
+  if (dirty) { st.textContent = "● Unsaved changes"; st.className = "save-status dirty"; }
+  else { st.textContent = ""; st.className = "save-status"; }
+}
+function addStockRow() {
+  STOCK.items.unshift({ part: "", model: "", qty: 0, location: "" });
+  STOCK_QUERY = "";
+  document.getElementById("stockSearch").value = "";
+  renderStockRows();
+  renderStockStats();
+  setDirty(true);
+  const first = document.querySelector('#stockBody input[data-idx="0"][data-field="part"]');
+  if (first) first.focus();
+}
+function deleteStockRow(idx) {
+  const it = STOCK.items[idx];
+  if (it && it.part && !confirm(`Remove "${it.part}" from the stock list?`)) return;
+  STOCK.items.splice(idx, 1);
+  renderStockRows();
+  renderStockStats();
+  setDirty(true);
+}
+async function saveStock() {
+  const btn = document.getElementById("stockSaveBtn");
+  const st = document.getElementById("stockSaveStatus");
+  btn.disabled = true;
+  st.textContent = "Saving…"; st.className = "save-status";
+  try {
+    const res = await fetch("/api/stock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: STOCK.items }),
+    });
+    const out = await res.json();
+    if (!res.ok || !out.ok) throw new Error(out.error || "failed to save");
+    STOCK = { updated: out.updated, items: out.items || [] };
+    renderStockStats();
+    renderStockRows();
+    const upd = STOCK.updated ? new Date(STOCK.updated).toLocaleDateString() : "-";
+    document.getElementById("stockMeta").textContent = `Updated: ${upd} · ${STOCK.items.length} item type(s)`;
+    setDirty(false);
+    st.textContent = "✓ Saved"; st.className = "save-status saved";
+  } catch (e) {
+    st.textContent = "✗ Failed: " + e.message; st.className = "save-status dirty";
+    btn.disabled = false;
+  }
+}
+async function openStock() {
+  const overlay = document.getElementById("stockOverlay");
+  overlay.hidden = false;
+  document.body.style.overflow = "hidden";
+  document.getElementById("stockMeta").textContent = "loading…";
+  try {
+    const res = await fetch("/api/stock", { cache: "no-store" });
+    STOCK = await res.json();
+  } catch (e) {
+    STOCK = { updated: "", items: [] };
+  }
+  if (!Array.isArray(STOCK.items)) STOCK.items = [];
+  const n = STOCK.items.length;
+  const upd = STOCK.updated ? new Date(STOCK.updated).toLocaleDateString() : "-";
+  document.getElementById("stockMeta").textContent = `Updated: ${upd} · ${n} item type(s)`;
+  document.getElementById("stockSearch").value = "";
+  STOCK_QUERY = "";
+  renderStockStats();
+  renderStockRows();
+  setDirty(false);
+}
+function closeStock() {
+  if (STOCK_DIRTY && !confirm("You have unsaved changes. Close without saving?")) return;
+  document.getElementById("stockOverlay").hidden = true;
+  document.body.style.overflow = "";
+}
+document.getElementById("stockBody").addEventListener("input", e => {
+  const inp = e.target.closest(".cell-input");
+  if (!inp) return;
+  const idx = Number(inp.dataset.idx);
+  const field = inp.dataset.field;
+  const it = STOCK.items[idx];
+  if (!it) return;
+  if (field === "qty") it[field] = Number(inp.value) || 0;
+  else it[field] = inp.value;
+  if (field === "part") {
+    const dot = inp.closest("td").querySelector(".sdot");
+    if (dot) dot.style.background = stockColor(inp.value);
+  }
+  if (field === "qty") { updateRowBadge(idx); renderStockStats(); }
+  setDirty(true);
+});
+document.getElementById("stockOverlay").addEventListener("click", e => {
+  if (e.target.id === "stockOverlay") closeStock();
+});
+document.getElementById("stockSearch").addEventListener("input", e => {
+  STOCK_QUERY = e.target.value.trim().toLowerCase();
+  renderStockRows();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !document.getElementById("stockOverlay").hidden) closeStock();
+});
+
+refresh(false);
+setInterval(() => refresh(false), 30000);
+</script>
+</body>
+</html>
