@@ -1,3 +1,9 @@
+# Milestone 1 update
+
+The deployment now uses frontend, backend and collector containers. Follow
+[the current migration guide](../MILESTONE_1.md) before applying the historical
+server setup below. The loopback upstream and collector bridge are preserved.
+
 # Server deployment
 
 Reference deployment for the application server (`10.1.99.251`). The app runs in
@@ -88,3 +94,4 @@ docker compose up -d --build       # update
 
 docker compose down                # remove the container (data in ./data is kept)
 ```
+

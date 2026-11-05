@@ -1,66 +1,79 @@
 name: printer-dashboard
 
+x-python: &python
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: printer-dashboard-python:milestone1
+  restart: unless-stopped
+  volumes:
+    - ./data:/app/data
+    - ./config.json:/app/config.json:ro
+  environment:
+    TZ: Asia/Jakarta
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  read_only: true
+  tmpfs: [/tmp]
+  mem_limit: 256m
+  pids_limit: 128
+  logging:
+    driver: json-file
+    options: {max-size: '10m', max-file: '3'}
+
 services:
-  printer-dashboard:
+  frontend:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: printer-dashboard:1.0
-    container_name: printer-dashboard
+      dockerfile: frontend/Dockerfile
+    image: printer-dashboard-frontend:milestone1
     restart: unless-stopped
-
-    # Published on the host loopback only. The shared nginx reverse proxy
-    # (https://printer-dashboard.irt.co.id) connects to 127.0.0.1:8090.
-    # The app listens on 8080 inside the container, so the host's 8080
-    # (used by IT-assets) is left untouched.
     ports:
-      - "127.0.0.1:8090:8080"
-
-    # Dedicated bridge with a fixed interface name (br-printerdash) so the host
-    # firewall (nftables) can allow this container to reach the printers.
-    # See the "Docker deployment" section in README.md.
-    networks:
-      - printerdash
-
-    volumes:
-      # Runtime data (state/history/stock) persists on the host.
-      - ./data:/app/data
-      # Printers, thresholds and notifications: edit on the host, then restart.
-      - ./config.json:/app/config.json:ro
-
-    environment:
-      TZ: Asia/Jakarta
-
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
+      - '127.0.0.1:8090:8080'
+    networks: [web]
+    depends_on:
+      backend:
+        condition: service_healthy
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     read_only: true
-    tmpfs:
-      - /tmp
-    mem_limit: 256m
-    pids_limit: 256
-
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    pids_limit: 128
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/api/state', timeout=8)",
-        ]
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8080/healthz']
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 20s
-
     logging:
       driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: {max-size: '10m', max-file: '3'}
+
+  backend:
+    <<: *python
+    command: ['python', 'app.py']
+    networks: [web]
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+
+  collector:
+    <<: *python
+    command: ['python', 'worker.py']
+    networks: [printerdash]
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import sys, runtime; s=runtime.collector_status(); sys.exit(0 if s.get('heartbeat_age_seconds') is not None and s['heartbeat_age_seconds'] < 90 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
 networks:
+  web:
+    driver: bridge
+    internal: true
   printerdash:
     name: printer-dashboard_printerdash
     driver: bridge

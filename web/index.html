@@ -267,7 +267,7 @@
   <span class="spacer"></span>
   <div class="live"><span class="dot"></span> System Normal</div>
   <button onclick="openStock()">📦 Spare Parts Stock</button>
-  <button onclick="refresh(true)">⟳ Refresh</button>
+  <button onclick="refresh(true)">⟳ Collect now</button>
 </header>
 
 <main>
@@ -476,12 +476,44 @@ function paint(state) {
 
 async function refresh(runCollect) {
   try {
-    const res = await fetch(runCollect ? "/api/collect" : "/api/state", { cache: "no-store" });
+    if (runCollect) {
+      const queued = await fetch("/api/collect", { method: "POST" });
+      if (!queued.ok) throw new Error("Could not queue collection");
+    }
+    const res = await fetch("/api/state", { cache: "no-store" });
+    if (!res.ok) throw new Error("Backend unavailable");
     paint(await res.json());
   } catch (e) {
-    document.getElementById("grid").innerHTML = '<div class="card">Failed to load data: ' + e.message + "</div>";
+    document.getElementById("grid").textContent = "Failed to load data: " + e.message;
+  }
+  await refreshCollectorStatus();
+}
+
+async function refreshCollectorStatus() {
+  let el = document.getElementById("collectorStatus");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "collectorStatus";
+    el.setAttribute("role", "status");
+    el.style.cssText = "padding:10px 0;font-size:13px;";
+    document.getElementById("grid").before(el);
+  }
+  try {
+    const res = await fetch("/api/collector", { cache: "no-store" });
+    if (!res.ok) throw new Error("Backend unavailable");
+    const s = await res.json();
+    const last = s.last_completed_at ? new Date(s.last_completed_at * 1000).toLocaleString() : "No completed poll";
+    el.textContent = `Collector: ${s.health} · ${s.activity || "waiting"} · Last completed: ${last}`
+      + (s.successful_printers !== undefined ? ` · Printers: ${s.successful_printers} successful / ${s.failed_printers} failed` : "")
+      + (s.request_pending ? " · Collection queued" : "")
+      + (s.last_error ? ` · Error: ${s.last_error}` : "");
+    el.style.color = s.health === "healthy" ? "#16a34a" : "#ea580c";
+  } catch (e) {
+    el.textContent = "Collector status unavailable — backend connection failed";
+    el.style.color = "#dc2626";
   }
 }
+
 
 document.getElementById("search").addEventListener("input", e => { QUERY = e.target.value.trim().toLowerCase(); renderGrid(); });
 document.getElementById("chips").addEventListener("click", e => {
@@ -681,6 +713,8 @@ document.addEventListener("keydown", e => {
 
 refresh(false);
 setInterval(() => refresh(false), 30000);
+setInterval(refreshCollectorStatus, 15000);
 </script>
 </body>
 </html>
+
