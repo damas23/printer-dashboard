@@ -7,31 +7,20 @@ preserved. `CONCEPT.md` describes the original prototype and is historical conte
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    User[Browser] -->|HTTPS| Proxy[Existing host reverse proxy]
-    Proxy -->|127.0.0.1:8090| Frontend[Frontend container]
-    Frontend -->|/api requests| Backend[Backend API container]
-    Backend <--> Data[Shared local data directory]
-    Collector[Collector container] <--> Data
-    Collector -->|HTTP 80| Printers[Printers]
-    Collector -->|Optional| Telegram[Telegram]
-```
+Production uses the existing shared HTTPS Nginx: `/` routes to frontend on
+`127.0.0.1:8090`, while `/api/` routes directly to backend on `127.0.0.1:8092`.
+The frontend serves static files only. On a laptop, an additional bundled dev
+Nginx provides these two routes through `http://localhost:8090`.
 
-- **Frontend:** Nginx serves existing light (`/`) and dark (`/v1.html`) pages and
-  proxies `/api/` to the backend. Both use the same browser origin.
-- **Backend:** Python standard-library HTTP API. Reads snapshots, edits stock,
-  manages alert dismissals, and queues collection requests. It never polls printers.
-- **Collector:** independent Python worker; collects at startup and then waits the
-  configured interval after each cycle. It also checks manual requests every second.
-- **Storage:** backend and collector share `./data:/app/data`. Frontend has no data
-  volume. Atomic file replacement and Linux file locks coordinate JSON writes.
-  Use a local Linux filesystem, not NFS/SMB. Run one collector per data directory.
-
-The external host Nginx continues pointing to `127.0.0.1:8090`. That address now
-belongs to the frontend. Backend/collector ports are not published. Only the
-collector joins the existing `br-printerdash` network for outbound printer traffic.
-Frontend/backend share a separate internal Docker network.
+- **Frontend:** stock Nginx serves the light (`/`) and dark (`/v1.html`) dashboard.
+- **Backend:** Python JSON API only; no polling thread or direct printer requests.
+- **Collector:** standalone worker; polls at startup, waits the configured interval
+  after each cycle, and checks queued manual requests every second.
+- **Storage:** backend and collector share `./data:/app/data`. Atomic replacement
+  and Linux file locks coordinate JSON writes on a local Linux filesystem.
+  Do not use NFS/SMB for shared storage. Run one worker per data directory.
+- **Networks:** frontend/backend use a Docker bridge. Only the collector joins the
+  printer network. The production printer bridge stays `br-printerdash`.
 
 ## Features retained
 
@@ -42,20 +31,37 @@ Frontend/backend share a separate internal Docker network.
 - Append-only consumable history. No PostgreSQL migration, email, login, or new
   reporting features are included in milestone 1.
 
-## Start
+## Start on your laptop
 
-Requires Linux, Docker Engine, and Docker Compose v2. Python services use Python
-3.11 standard library only; no pip dependencies. Frontend uses Nginx.
+Requires Docker Engine / Docker Desktop with Linux containers and Compose v2.
+Use WSL's Linux filesystem for the checkout/data when developing on Windows.
+Python 3.11 services use only the standard library.
 
 ```sh
-docker compose config -q
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail=100 backend collector frontend
+docker compose -f compose.yml -f compose.dev.yml config -q
+docker compose -f compose.yml -f compose.dev.yml up -d --build
+docker compose -f compose.yml -f compose.dev.yml ps
 ```
 
-Open the existing HTTPS domain, or `http://127.0.0.1:8090` from the server.
-Deployment and rollback instructions: [MILESTONE_1.md](MILESTONE_1.md).
+Open **http://localhost:8090**. For UI-only development, start `frontend backend nginx`
+instead of all services; stop any already running collector separately.
+
+## Start in production
+
+```sh
+docker compose -f compose.yml -f compose.prod.yml config -q
+docker compose -f compose.yml -f compose.prod.yml up -d --build
+```
+
+Production adds three application containers and uses your existing shared Nginx.
+Update its dashboard vhost using [the production example](deploy/nginx-production.example.conf).
+Keep the same public HTTPS domain. Always select both Compose files explicitly;
+base-only starts services without a browser entry point.
+
+Before updating an existing stack, stop it using its OLD Compose configuration.
+The old `docker-compose.yml` is removed by this update. Local override files are
+not loaded automatically by these explicit commands. Full instructions:
+[environment guide](deploy/README.md) and [migration/rollback](MILESTONE_1.md).
 
 ## Configuration and polling
 
@@ -64,8 +70,10 @@ mounted read-only into backend/collector. Restart **collector** after changing
 printer addresses, thresholds, or notification settings:
 
 ```sh
-docker compose restart collector
+docker compose -f compose.yml -f compose.dev.yml restart collector
 ```
+
+For production commands, replace `compose.dev.yml` with `compose.prod.yml`.
 
 The repository retains its current 60-second interval. To choose five minutes,
 set `poll_interval_seconds` to `300` and restart collector. The worker requires a
@@ -115,8 +123,9 @@ poll may be repeated after restart (at-least-once, not exactly-once).
 | POST | `/api/restore` | Restore alert; omit `key` to restore all |
 
 `GET /api/collect` now returns 405. Update any external scripts to POST. Root/static
-URLs are served only by frontend. `/healthz` is the frontend's own liveness check;
-use `/api/health` for backend reachability.
+URLs are served only by frontend. `/healthz` is the dev entry proxy liveness
+check. The stock frontend healthcheck uses `/`; use `/api/health` to check backend
+reachability through the chosen entry proxy.
 
 ## Persistent data
 

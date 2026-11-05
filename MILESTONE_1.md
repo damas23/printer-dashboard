@@ -1,91 +1,104 @@
-# Milestone 1 — Separate services without PostgreSQL
+# Milestone 1 — Separate services, JSON storage, explicit environments
 
-## Scope and completion criteria
+## Delivery
 
-| Requirement | Delivery |
-|---|---|
-| Separate frontend | Static pages in an independent Nginx container |
-| Separate backend | JSON API only; no printer requests or collector threads |
-| Separate collector | Independent worker with automatic polling and manual queue |
-| Preserve data | Existing `./data` bind mount and JSON formats |
-| Frontend collector status | Heartbeat, last poll, counts, activity, errors |
-| No PostgreSQL | Local filesystem coordination only |
-| Existing public address | Host reverse proxy still uses loopback port 8090 |
-| Service isolation | API restart does not restart collector; no API ports published |
+Frontend serves static files, backend serves the API, and collector polls independently.
+Existing printer configuration, JSON formats, stock/history and poll interval are retained.
+No PostgreSQL, email, login or new reporting functionality is added.
 
-## Reference server migration
+| Environment | Services | Entry point |
+|---|---|---|
+| Development | nginx, frontend, backend, collector | http://localhost:8090 |
+| Production | frontend, backend, collector | Existing shared HTTPS Nginx |
 
-Do not run the old monolith and new collector against the same data directory.
-Perform these steps in a maintenance window in `/opt/printer-dashboard`.
-The new branch lives in Damas's repository; Aziz's `origin` and `main` are unchanged.
+Use `compose.yml` together with `compose.dev.yml` OR `compose.prod.yml` explicitly.
+The old docker-compose.yml is removed. See [deploy/README.md](deploy/README.md).
 
-1. Check `git status` and preserve any local configuration/code changes before
-   switching branches. Do not reset or overwrite server-specific settings.
-2. Stop the old app and make a consistent backup before checkout:
+## Production migration
+
+Run from `/opt/printer-dashboard` during a maintenance window. Stop the old stack
+BEFORE pulling/checking out the new files. Preserve uncommitted server-specific
+configuration and local override files; never reset or overwrite them blindly.
+
+1. Inspect `git status` and record `git rev-parse HEAD` and the current branch.
+   Back up `/opt/nginx/nginx.conf` using your normal configuration backup location.
+2. Stop the old stack using the same old Compose files that launched it. For the
+   original monolith or default four-container stack:
 
    ```sh
-   docker compose down
+   docker compose -f docker-compose.yml down
    mkdir -p /opt/printer-dashboard-backups
    tar -czf /opt/printer-dashboard-backups/pre-milestone1-$(date +%Y%m%d-%H%M%S).tgz data config.json docker-compose.yml
-   git rev-parse HEAD
    ```
 
-   Record the commit SHA and exact backup filename. Restrict access to backups if
-   notification credentials are configured.
-3. Fetch and check out the milestone branch:
+   Include any additional active override files in the backup. Record the archive
+   path and commit SHA. Keep backups containing credentials access-restricted.
+3. Update the milestone branch from Damas's remote:
 
    ```sh
    git fetch damas
-   git switch -c milestone-1-split --track damas/milestone-1-split
+   git switch milestone-1-split
+   git pull --ff-only damas milestone-1-split
    ```
 
-   If the local branch already exists, switch to it instead. Preserve the existing
-   server `config.json`; no printer/threshold changes are required for this milestone.
-4. Validate and launch:
+   If no local milestone branch exists, create it with
+   `git switch -c milestone-1-split --track damas/milestone-1-split` instead.
+   Resolve local modifications first; preserve the production config.json/data.
+4. Confirm host TCP ports 8090 and 8092 are available. If 8092 is occupied, set
+   PRINTER_API_PORT to an available port in an untracked .env and match the proxy
+   upstream. Use the same value for later deployments.
+5. Validate and start the three production services:
 
    ```sh
-   docker compose config -q
-   docker compose up -d --build
-   docker compose ps
-   docker compose logs --tail=100 frontend backend collector
+   docker compose -f compose.yml -f compose.prod.yml config -q
+   docker compose -f compose.yml -f compose.prod.yml up -d --build
+   docker compose -f compose.yml -f compose.prod.yml ps
+   docker compose -f compose.yml -f compose.prod.yml logs --tail=100 frontend backend collector
    ```
 
-The collector keeps the existing `br-printerdash` interface, so its printer firewall
-rules remain relevant. The frontend/backend network is separate; a host firewall
-with a forward-drop policy may need an allow rule for frontend-to-backend TCP 8080.
-Restrict that rule to the new Docker network, not all forwarded traffic. External
-Nginx upstream/HTTPS configuration remains as deployed.
+6. Update ONLY the dashboard vhost in the existing shared host-networked Nginx.
+   Use deploy/nginx-production.example.conf: `/` -> UI 127.0.0.1:8090;
+   `/api/` -> backend 127.0.0.1:8092. Retain API prefix, TLS settings, domain,
+   redirects and other app vhosts. Test Nginx configuration and then reload using
+   the existing proxy's own Compose deployment; see deploy/README.md.
 
-## Server acceptance checks
+Keep one collector active; do not run the old monolith concurrently on this data.
+The production bridge remains br-printerdash. Preserve its outbound printer rules;
+verify UI/API published-port traffic is permitted by the host firewall as needed.
 
-- `/` and `/v1.html` open through the existing HTTPS address.
-- `curl http://127.0.0.1:8090/api/health` returns backend `ok`.
-- Printer cards match the original readings after the initial poll.
-- Collector status shows a recent heartbeat and completed poll.
-- Collect now returns queued state, then updates readings without a second worker.
-- Stock can be saved, and existing stock/history remain present.
-- `docker compose restart backend` does not interrupt collector logs/heartbeat.
-- `docker compose stop collector`: after 90 seconds status becomes unresponsive,
-  while stock and cached printer data remain available. Start collector again.
-- `docker compose restart` preserves stock/history and recovers polling.
+## Acceptance checks
 
-Build/startup, frontend routing, actual printer access and host firewall behaviour
-must be verified on Docker. Local Python tests alone do not validate those paths.
+- `curl http://127.0.0.1:8090/` returns dashboard HTML.
+- `curl http://127.0.0.1:8092/api/health` returns backend `ok`.
+- The existing HTTPS domain serves both dashboard themes and `/api/health`.
+- `/api/state`, `/api/collector` and stock saving work through HTTPS.
+- Collector heartbeat and completed poll are recent; readings match the printer.
+- Collect now queues then completes without starting a second poller.
+- Restarting backend leaves collector running; saved stock/history remain present.
+- Stopping collector for over 90 seconds shows unresponsive status while saved
+  data remains readable; starting it again recovers collection.
+- Other applications behind the shared Nginx remain accessible after reload.
+
+Python integration tests validate API/worker behaviour with a fake printer.
+Docker builds, Nginx routing, file mounts, firewall and live device access must be
+checked on the deployment host. A healthy static frontend alone does not validate API routing.
 
 ## Rollback
 
+Stop the NEW production stack with its new file selection:
+
 ```sh
-docker compose down
-# Replace SAVED_COMMIT with the SHA recorded before migration.
+docker compose -f compose.yml -f compose.prod.yml down
+# Replace SAVED_COMMIT with the recorded pre-migration SHA.
 git switch --detach SAVED_COMMIT
-docker compose up -d --build
+docker compose -f docker-compose.yml up -d --build
 ```
 
-Original JSON formats remain compatible. If files need restoring, stop services
-first and restore from the recorded backup (restoration discards later edits).
-Do not delete the `data` directory or use force pushes to roll back.
+Use the original override file selection if the old stack required it. Restore the
+previous shared Nginx configuration, test it and reload. Original JSON formats remain
+compatible; restore data from the backup only if necessary, with writers stopped.
+Restoring data discards subsequent edits. Do not delete data or force-push Git history.
 
 ## Later milestones
 
-PostgreSQL integration and schema migration, authentication/roles, email alerts,
-per-endpoint polling schedules/backoff, historical reports and stock movements.
+PostgreSQL migration, access control, email, collection schedules/backoff and reporting.

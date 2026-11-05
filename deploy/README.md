@@ -1,97 +1,88 @@
-# Milestone 1 update
+# Deployment environments
 
-The deployment now uses frontend, backend and collector containers. Follow
-[the current migration guide](../MILESTONE_1.md) before applying the historical
-server setup below. The loopback upstream and collector bridge are preserved.
+Application code and JSON data formats are identical in both environments.
+Always explicitly select the base file and exactly one environment file.
 
-# Server deployment
+| Environment | Command files | Proxy |
+|---|---|---|
+| Laptop / WSL with Docker Desktop Linux containers | `compose.yml` + `compose.dev.yml` | Bundled dev Nginx on localhost:8090 |
+| Production Linux | `compose.yml` + `compose.prod.yml` | Existing shared host-networked HTTPS Nginx |
 
-Reference deployment for the application server (`10.1.99.251`). The app runs in
-Docker and is published through the shared nginx reverse proxy at `/opt/nginx`.
-
-## Layout on the server
-
-| Item | Path |
-| --- | --- |
-| Project / compose | `/opt/printer-dashboard` |
-| Runtime data (volume) | `/opt/printer-dashboard/data` |
-| Shared reverse proxy | `/opt/nginx` (nginx container, host networking) |
-| Firewall | `/etc/nftables.conf` |
-
-## 1. Run the container
+## Laptop
 
 ```sh
-cd /opt/printer-dashboard
-git pull --ff-only
-docker compose up -d --build
-docker compose ps
+docker compose -f compose.yml -f compose.dev.yml config -q
+docker compose -f compose.yml -f compose.dev.yml up -d --build
+docker compose -f compose.yml -f compose.dev.yml ps
 ```
 
-The app listens on `8080` inside the container and is published on
-`127.0.0.1:8090` on the host (loopback only). See `../docker-compose.yml`.
+Open http://localhost:8090 or http://localhost:8090/v1.html. The bundled
+`nginx-dev.conf` routes `/` to frontend:80 and `/api/` to backend:8080.
+No `/opt/nginx` file, DNS, TLS setup or local override is required.
+Frontend/backend have no published ports in dev.
 
-## 2. Firewall
+For UI-only work (no printer polling), start `frontend backend nginx` explicitly.
+This does not stop a collector that is already running: stop it explicitly first.
+Use VPN/LAN access for real printer data; avoid running a second collector against
+production printers unintentionally. Local JSON storage is separate from server data.
 
-The host's `forward` chain policy is `drop`, so the container needs an explicit
-allowance to reach the printers (TCP/80). Add the rules from
-[`nftables-printer-dashboard.nft`](nftables-printer-dashboard.nft) to the
-`forward` chain in `/etc/nftables.conf`, then:
+The dev project name is `printer-dashboard-dev` and its printer bridge is
+`br-printerdev`. Production retains project `printer-dashboard` and bridge
+`br-printerdash` for the existing printer firewall rules. Do not point both projects
+at the same data directory. Dev and prod still use the same port by default; if
+running on the same host, choose a different PRINTER_HTTP_PORT for one environment.
+
+## Existing laptop deployment upgrade
+
+Before pulling this change, stop the OLD four-service stack using its old config:
 
 ```sh
-cp -a /etc/nftables.conf /etc/nftables.conf.bak-$(date +%Y%m%d-%H%M%S)
-nft -c -f /etc/nftables.conf && nft -f /etc/nftables.conf
-nft list chain inet filter forward
+docker compose -f docker-compose.yml down
 ```
 
-## 3. Reverse proxy (HTTPS)
+Preserve any local overrides/configuration first. If you used overrides to create
+the old stack, use the same old file selection for shutdown. Do this BEFORE pulling,
+since docker-compose.yml is removed by this update. Data bind mounts are retained;
+do not delete data. Then pull and use the dev commands above.
 
-Add the `upstream printer_dashboard` block and the two `server` blocks from
-[`nginx-printer-dashboard.conf`](nginx-printer-dashboard.conf) to
-`/opt/nginx/nginx.conf`, then:
+## Production
+
+Follow [MILESTONE_1.md](../MILESTONE_1.md) for backup and migration.
 
 ```sh
-cd /opt/nginx
+docker compose -f compose.yml -f compose.prod.yml config -q
+docker compose -f compose.yml -f compose.prod.yml up -d --build
+docker compose -f compose.yml -f compose.prod.yml ps
+```
+
+There is no extra nginx service in production. UI is published at 127.0.0.1:8090;
+API at 127.0.0.1:8092. Check 8092 is free first, or set PRINTER_API_PORT consistently
+in the deployment environment/.env and Nginx upstream. The collector publishes no port.
+
+Use `nginx-production.example.conf` to edit only the dashboard's existing vhost in
+`/opt/nginx/nginx.conf`. Keep other apps, domain, TLS certificates and HTTP redirect.
+Preserve the `/api/` prefix when proxying to the backend (no proxy_pass trailing slash).
+The example is instructional, not a replacement for the full shared Nginx config.
+
+Test and reload through your EXISTING Nginx stack from its own directory. Assuming
+its Compose service is named nginx:
+
+```sh
 docker compose exec -T nginx nginx -t
 docker compose exec -T nginx nginx -s reload
 ```
 
-The shared certificate (`/opt/nginx/certs/tls.crt`) is self-signed and must
-include `printer-dashboard.irt.co.id` in its SANs. To regenerate it with the
-extra name:
+Reload only if the configuration test succeeds. If Nginx uses a different service
+name/Compose file, use that deployment's equivalent commands. Do not restart other apps.
 
-```sh
-openssl req -x509 -newkey rsa:2048 -sha256 -days 800 -nodes \
-    -keyout /opt/nginx/certs/tls.key -out /opt/nginx/certs/tls.crt \
-    -subj "/C=ID/O=Indo Raya Tenaga/CN=asset-it.irt.co.id" \
-    -addext "subjectAltName=DNS:asset-it.irt.co.id,DNS:ntp-so.irt.co.id,DNS:printer-dashboard.irt.co.id,IP:10.1.99.251,IP:127.0.0.1" \
-    -addext "basicConstraints=critical,CA:FALSE" \
-    -addext "keyUsage=critical,digitalSignature,keyEncipherment" \
-    -addext "extendedKeyUsage=serverAuth"
-chown root:root /opt/nginx/certs/tls.crt /opt/nginx/certs/tls.key
-chmod 640 /opt/nginx/certs/tls.crt /opt/nginx/certs/tls.key
-cd /opt/nginx && docker compose exec -T nginx nginx -s reload
-```
+`nftables-printer-dashboard.nft` remains the printer bridge reference. The host firewall
+must also permit the necessary published UI/API connections through the Docker bridge.
+Never broadly open all forwarded traffic just to make the app work.
 
-## 4. DNS
+## Files and validation
 
-Point `printer-dashboard.irt.co.id` at `10.1.99.251` in internal DNS. Until then,
-test from the server with `--resolve`:
-
-```sh
-curl -sI --resolve printer-dashboard.irt.co.id:80:127.0.0.1 \
-  http://printer-dashboard.irt.co.id/ | grep -i '^location'   # expect 308 -> https
-
-curl --fail --insecure --resolve printer-dashboard.irt.co.id:443:127.0.0.1 \
-  https://printer-dashboard.irt.co.id/api/state
-```
-
-## Update / rollback
-
-```sh
-cd /opt/printer-dashboard
-git pull --ff-only
-docker compose up -d --build       # update
-
-docker compose down                # remove the container (data in ./data is kept)
-```
-
+Real credentials, certificate files and machine-specific overrides stay out of Git.
+The repository includes reproducible development routing and a production example.
+Store host-managed production Nginx configuration in your normal backed-up configuration
+location. Docker builds, proxy routing and actual printer connectivity require acceptance
+checks on a Docker host; Python integration tests do not cover these paths.

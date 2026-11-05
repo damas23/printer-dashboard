@@ -22,8 +22,7 @@ x-python: &python
     options: {max-size: '10m', max-file: '3'}
 
 services:
-  # Static UI server. Uses the nginx image's stock configuration (no config
-  # file of our own), so nothing nginx-related lives in this repository.
+  # Static dashboard only. Environment-specific proxies route /api to backend.
   frontend:
     image: nginx:1.28-alpine
     restart: unless-stopped
@@ -39,38 +38,6 @@ services:
     pids_limit: 128
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:80/']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    logging:
-      driver: json-file
-      options: {max-size: '10m', max-file: '3'}
-
-  # Edge reverse proxy. The configuration is deliberately NOT part of this
-  # repository: it is installed on the host and mounted read-only, mirroring
-  # how the production server runs /opt/nginx/nginx.conf.
-  nginx:
-    image: nginx:1.28-alpine
-    restart: unless-stopped
-    ports:
-      - '127.0.0.1:8090:8080'
-    volumes:
-      - /opt/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    networks: [web]
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_healthy
-    cap_drop: [ALL]
-    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
-    security_opt: [no-new-privileges:true]
-    read_only: true
-    tmpfs: [/tmp]
-    mem_limit: 128m
-    pids_limit: 128
-    healthcheck:
-      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8080/healthz']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -108,3 +75,4 @@ networks:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.name: br-printerdash
+

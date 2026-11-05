@@ -1,0 +1,8 @@
+# Production: existing shared Nginx uses host networking and these loopback ports.
+services:
+  frontend:
+    ports:
+      - '127.0.0.1:${PRINTER_HTTP_PORT:-8090}:80'
+  backend:
+    ports:
+      - '127.0.0.1:${PRINTER_API_PORT:-8092}:8080'
