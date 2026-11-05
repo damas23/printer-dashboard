@@ -6,7 +6,7 @@ aturan notifikasi, lalu menyimpan hasil ke folder data/.
 Hanya memakai standard library Python (tanpa pip install).
 
 Jalankan sekali  : py collector.py --once
-Jalankan berkala  : py collector.py
+Jalankan berkala  : python worker.py
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from storage import DATA_DIR, load_json, save_json, data_lock, transaction
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+CONFIG_PATH = os.environ.get("CONFIG_PATH", os.path.join(BASE_DIR, "config.json"))
 STATE_PATH = os.path.join(DATA_DIR, "state.json")
 HISTORY_PATH = os.path.join(DATA_DIR, "history.jsonl")
 NOTIFY_PATH = os.path.join(DATA_DIR, "notify_state.json")
@@ -46,22 +46,6 @@ FX_ENDPOINTS = {
 # --------------------------------------------------------------------------- #
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-
-
-def load_json(path: str, default):
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return json.load(fh)
-    except (OSError, ValueError):
-        return default
-
-
-def save_json(path: str, obj) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(obj, fh, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
 
 
 def http_get_json(url: str, timeout: int = 10):
@@ -468,6 +452,7 @@ def apply_dismissals(alerts: list, dismissed: dict) -> None:
         a["dismissed"] = a["key"] in dismissed
 
 
+@transaction
 def dismiss_alert(key: str) -> dict:
     state = load_json(STATE_PATH, {"alerts": []})
     dismissed = load_json(DISMISSED_PATH, {})
@@ -481,6 +466,7 @@ def dismiss_alert(key: str) -> dict:
     return state
 
 
+@transaction
 def restore_alert(key=None) -> dict:
     dismissed = load_json(DISMISSED_PATH, {})
     if key is None:
@@ -516,6 +502,7 @@ def _clean_stock_item(raw) -> dict | None:
     return item
 
 
+@transaction
 def save_stock(data) -> dict:
     """Simpan seluruh daftar stok ke data/stock.json."""
     if not isinstance(data, dict) or not isinstance(data.get("items"), list):
@@ -543,14 +530,16 @@ def run_once(config: dict) -> dict:
         state["printers"].append(dev)
         state["alerts"].extend(alerts)
 
-    dismissed = load_json(DISMISSED_PATH, {})
-    apply_dismissals(state["alerts"], dismissed)
-    save_json(DISMISSED_PATH, dismissed)
-
+    # Commit the snapshot and dismissal changes together. Network requests happen
+    # outside this lock so the backend stays responsive during a slow poll.
+    with data_lock():
+        dismissed = load_json(DISMISSED_PATH, {})
+        apply_dismissals(state["alerts"], dismissed)
+        save_json(DISMISSED_PATH, dismissed)
+        save_json(STATE_PATH, state)
     visible = [a for a in state["alerts"] if not a.get("dismissed")]
     notify_state = dispatch_notifications(visible, notify_state, notify_cfg)
     save_json(NOTIFY_PATH, notify_state)
-    save_json(STATE_PATH, state)
 
     # riwayat untuk tren (append-only)
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -598,16 +587,10 @@ def main() -> None:
             print(f"    [{a['level']}] {a['message']}")
         return
 
-    interval = int(config.get("poll_interval_seconds", 300))
-    print(f"Collector jalan tiap {interval} detik. Tekan Ctrl+C untuk berhenti.")
-    while True:
-        try:
-            state = run_once(config)
-            print(f"[{now_iso()}] poll selesai, {len(state['alerts'])} alert")
-        except Exception as exc:  # noqa: BLE001 - collector harus tetap hidup
-            print(f"[{now_iso()}] error: {exc}", file=sys.stderr)
-        time.sleep(interval)
+    print("Run python worker.py for scheduled collection.", file=sys.stderr)
+    sys.exit(2)
 
 
 if __name__ == "__main__":
     main()
+

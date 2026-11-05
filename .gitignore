@@ -15,3 +15,14 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+
+# Local synchronization and atomic-write files
+data/.*.lock
+data/.write-*
+
+# Local dev overrides (not for the repository)
+docker-compose.override.yml
+
+# Machine-specific deployment environment
+.env

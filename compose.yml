@@ -1,0 +1,78 @@
+name: printer-dashboard
+
+x-python: &python
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: printer-dashboard-python:milestone1
+  restart: unless-stopped
+  volumes:
+    - ./data:/app/data
+    - ./config.json:/app/config.json:ro
+  environment:
+    TZ: Asia/Jakarta
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  read_only: true
+  tmpfs: [/tmp]
+  mem_limit: 256m
+  pids_limit: 128
+  logging:
+    driver: json-file
+    options: {max-size: '10m', max-file: '3'}
+
+services:
+  # Static dashboard only. Environment-specific proxies route /api to backend.
+  frontend:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    networks: [web]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx, /run]
+    mem_limit: 128m
+    pids_limit: 128
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:80/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}
+
+  backend:
+    <<: *python
+    command: ['python', 'app.py']
+    networks: [web]
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+
+  collector:
+    <<: *python
+    image: printer-dashboard-collector:milestone1
+    command: ['python', 'worker.py']
+    networks: [printerdash]
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import sys, runtime; s=runtime.collector_status(); sys.exit(0 if s.get('heartbeat_age_seconds') is not None and s['heartbeat_age_seconds'] < 90 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  web:
+    driver: bridge
+  printerdash:
+    name: printer-dashboard_printerdash
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-printerdash
+
